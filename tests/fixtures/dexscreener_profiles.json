@@ -1,0 +1,4 @@
+[
+  {"chainId": "solana", "tokenAddress": "token-1"},
+  {"chainId": "ethereum", "tokenAddress": "token-2"}
+]

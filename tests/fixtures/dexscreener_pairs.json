@@ -1,0 +1,12 @@
+[
+  {
+    "chainId": "solana",
+    "pairAddress": "sol-pool-1",
+    "baseToken": {"address": "token-1", "symbol": "DOG"},
+    "pairCreatedAt": 1785390000000,
+    "liquidity": {"usd": 15000},
+    "volume": {"m5": 2400},
+    "txns": {"m5": {"buys": 31, "sells": 8}},
+    "priceChange": {"m5": 12.5}
+  }
+]

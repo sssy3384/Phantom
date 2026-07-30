@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": "solana_sol-pool-2",
+      "attributes": {
+        "address": "sol-pool-2",
+        "base_token_address": "token-3",
+        "name": "GECKO / SOL",
+        "pool_created_at": "2026-07-30T08:00:00Z",
+        "reserve_in_usd": "22000",
+        "volume_usd": {"m5": "3500"},
+        "transactions": {"m5": {"buys": 28, "sells": 5}},
+        "price_change_percentage": {"m5": "18.2"}
+      }
+    }
+  ]
+}

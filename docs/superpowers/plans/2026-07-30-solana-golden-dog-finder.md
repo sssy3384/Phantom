@@ -58,7 +58,7 @@ dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.1,<2", "pytest-httpx>=0.35,<1"]
 pythonpath = ["src"]
 ```
 
-Run: `python3 -m venv .venv && .venv/bin/pip install -e '.[dev]' && .venv/bin/pytest tests/test_config.py -v`
+Run: `python3 -m venv .venv && .venv/bin/pip install -e . && .venv/bin/pip install --group dev && .venv/bin/pytest tests/test_config.py -v`
 
 Expected: FAIL because `golden_dog.config` does not exist.
 

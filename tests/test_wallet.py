@@ -9,6 +9,8 @@ from golden_dog.clients.prices import DexPriceClient
 from golden_dog.clients.wallet import WalletClient
 from golden_dog.config import Settings
 from golden_dog.models import WalletAsset, WalletSnapshot
+from golden_dog.repository import Repository
+from golden_dog.wallet import WalletService
 
 
 def test_settings_reads_optional_watch_wallet_address(monkeypatch):
@@ -147,3 +149,93 @@ async def test_dex_prices_keeps_other_mint_price_when_one_payload_lacks_price(ht
         prices = await DexPriceClient(http_client).prices(("mint-1", "mint-2"))
 
     assert prices == {"mint-1": None, "mint-2": 2.5}
+
+
+class BalanceStub:
+    def __init__(self, snapshot: WalletSnapshot | None) -> None:
+        self.snapshot_value = snapshot
+        self.addresses: list[str | None] = []
+
+    async def snapshot(self, address: str | None) -> WalletSnapshot | None:
+        self.addresses.append(address)
+        return self.snapshot_value
+
+
+class PriceStub:
+    def __init__(self, values: dict[str, float | None]) -> None:
+        self.values = values
+        self.requests: list[tuple[str, ...]] = []
+
+    async def prices(self, mints: tuple[str, ...]) -> dict[str, float | None]:
+        self.requests.append(mints)
+        return self.values
+
+
+@pytest.mark.asyncio
+async def test_wallet_service_persists_missing_address_error(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    balances = BalanceStub(None)
+    prices = PriceStub({})
+
+    snapshot = await WalletService(repo, balances, prices).sample("   ", datetime(2026, 7, 30, tzinfo=UTC))
+
+    assert snapshot.error == "wallet address not configured"
+    assert snapshot.address is None
+    assert repo.latest_wallet_snapshot() == snapshot
+    assert balances.addresses == []
+    assert prices.requests == []
+
+
+@pytest.mark.asyncio
+async def test_wallet_service_persists_unavailable_balance_error(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    balances = BalanceStub(None)
+
+    snapshot = await WalletService(repo, balances, PriceStub({})).sample("wallet-1", datetime(2026, 7, 30, tzinfo=UTC))
+
+    assert snapshot.error == "wallet data unavailable"
+    assert snapshot.address == "wallet-1"
+    assert repo.latest_wallet_snapshot() == snapshot
+    assert balances.addresses == ["wallet-1"]
+
+
+@pytest.mark.asyncio
+async def test_wallet_service_keeps_assets_without_price_and_sorts_by_usd(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    raw = WalletSnapshot(
+        "wallet-1",
+        (WalletAsset("mint-a", "AAA", 2.0, None, None), WalletAsset("mint-b", "BBB", 3.0, None, None)),
+        None,
+        datetime(2000, 1, 1, tzinfo=UTC),
+        None,
+    )
+    prices = PriceStub({"mint-a": None, "mint-b": 1.115})
+
+    snapshot = await WalletService(repo, BalanceStub(raw), prices).sample("wallet-1", datetime(2026, 7, 30, tzinfo=UTC))
+
+    assert prices.requests == [("mint-a", "mint-b")]
+    assert snapshot.assets == (
+        WalletAsset("mint-b", "BBB", 3.0, 1.115, 3.35),
+        WalletAsset("mint-a", "AAA", 2.0, None, None),
+    )
+    assert snapshot.total_usd == 3.35
+    assert snapshot.error is None
+
+
+@pytest.mark.asyncio
+async def test_wallet_service_values_native_sol_with_wrapped_sol_price(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    raw = WalletSnapshot(
+        "wallet-1", (WalletAsset(None, "SOL", 1.0, None, None),), None,
+        datetime(2000, 1, 1, tzinfo=UTC), None,
+    )
+    wrapped_sol_mint = "So11111111111111111111111111111111111111112"
+    prices = PriceStub({wrapped_sol_mint: 150.25})
+
+    snapshot = await WalletService(repo, BalanceStub(raw), prices).sample(
+        "wallet-1", datetime(2026, 7, 30, tzinfo=UTC)
+    )
+
+    assert prices.requests == [(wrapped_sol_mint,)]
+    assert snapshot.assets == (WalletAsset(None, "SOL", 1.0, 150.25, 150.25),)
+    assert snapshot.total_usd == 150.25

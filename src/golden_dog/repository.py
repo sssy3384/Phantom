@@ -9,7 +9,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 
-from .models import Decision, TradeAdvice
+from .models import Decision, TradeAdvice, WalletAsset, WalletSnapshot
 
 
 ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
@@ -81,6 +81,12 @@ class Repository:
                     expires_at INTEGER NOT NULL,
                     owner_token TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS wallet_snapshots (
+                    sampled_at TEXT PRIMARY KEY,
+                    address TEXT,
+                    payload_json TEXT NOT NULL,
+                    error TEXT
+                );
                 """
             )
             columns = {
@@ -117,6 +123,48 @@ class Repository:
                     advice_json,
                 ),
             )
+
+    def save_wallet_snapshot(self, snapshot: WalletSnapshot) -> None:
+        payload = {
+            "address": snapshot.address,
+            "assets": [
+                {
+                    "mint_address": asset.mint_address,
+                    "symbol": asset.symbol,
+                    "quantity": asset.quantity,
+                    "price_usd": asset.price_usd,
+                    "usd_value": asset.usd_value,
+                }
+                for asset in snapshot.assets
+            ],
+            "total_usd": snapshot.total_usd,
+            "sampled_at": snapshot.sampled_at.isoformat(),
+            "error": snapshot.error,
+        }
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO wallet_snapshots (sampled_at, address, payload_json, error)
+                VALUES (?, ?, ?, ?)
+                """,
+                (snapshot.sampled_at.isoformat(), snapshot.address, json.dumps(payload), snapshot.error),
+            )
+
+    def latest_wallet_snapshot(self) -> WalletSnapshot | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM wallet_snapshots ORDER BY sampled_at DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(row["payload_json"])
+        return WalletSnapshot(
+            address=payload["address"],
+            assets=tuple(WalletAsset(**asset) for asset in payload["assets"]),
+            total_usd=payload["total_usd"],
+            sampled_at=datetime.fromisoformat(payload["sampled_at"]),
+            error=payload["error"],
+        )
 
     def top_signals(self, limit: int) -> list[Decision]:
         with self._connect() as connection:

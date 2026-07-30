@@ -4,10 +4,27 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
+from fastapi.testclient import TestClient
 
-from golden_dog.main import run_combined_scan
+from golden_dog.main import create_runtime_app, run_combined_scan
 from golden_dog.models import WalletSnapshot
+from golden_dog.repository import Repository
 from golden_dog.runtime import RuntimeState, RuntimeStatus
+
+
+def test_runtime_app_passes_runtime_to_dashboard(tmp_path):
+    runtime = RuntimeStatus(interval_seconds=45, state=RuntimeState.RUNNING)
+
+    async def scan():
+        return None
+
+    with TestClient(create_runtime_app(
+        Repository(tmp_path / "signals.sqlite3"), scan, interval_seconds=45, runtime=runtime,
+    )) as client:
+        payload = client.get("/api/dashboard").json()
+
+    assert payload["runtime"]["state"] == "running"
+    assert payload["runtime"]["interval_seconds"] == 45
 
 
 @pytest.mark.asyncio

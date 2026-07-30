@@ -1,18 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Golden Dog Finder</title>
+    <title>金狗信号监控</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
     <main>
-      <header><h1>Golden Dog Finder</h1><p>Read-only Solana signal monitor</p></header>
-      <section id="summary" aria-label="Signal summary"></section>
-      <section><h2>Top signals</h2><div id="signals"></div></section>
-      <section><h2>Signal detail</h2><div id="detail"><p>Select a signal to inspect its evidence and risk.</p></div></section>
-      <section><h2>Source health</h2><div id="health"></div></section>
+      <header><h1>金狗信号监控</h1><p>只读 Solana 信号与钱包持仓面板</p></header>
+      <section><h2>信号摘要</h2><div id="summary" aria-label="信号摘要"></div></section>
+      <section><h2>钱包总额</h2><div id="wallet"></div></section>
+      <section><h2>钱包资产</h2><div id="assets"></div></section>
+      <section><h2>系统状态（运行状态）</h2><div id="runtime"></div></section>
+      <section><h2>数据源状态</h2><div id="health"></div></section>
+      <section><h2>信号列表</h2><div id="signals"></div></section>
+      <section><h2>信号详情</h2><div id="detail"><p>选择信号查看证据与风险。</p></div></section>
     </main>
     <script src="/static/app.js"></script>
   </body>

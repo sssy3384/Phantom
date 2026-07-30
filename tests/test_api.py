@@ -7,8 +7,9 @@ import pytest
 
 from golden_dog.api import create_app, risk_flags
 from golden_dog.config import Settings
-from golden_dog.models import Decision, TradeAdvice
+from golden_dog.models import Decision, TradeAdvice, WalletAsset, WalletSnapshot
 from golden_dog.repository import Repository
+from golden_dog.runtime import RuntimeState, RuntimeStatus
 
 
 NOW = datetime(2026, 7, 30, 12, tzinfo=UTC)
@@ -61,7 +62,13 @@ def repository(tmp_path):
 
 @pytest.fixture
 def client(repository):
-    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+    runtime = RuntimeStatus(
+        interval_seconds=30,
+        state=RuntimeState.RUNNING,
+        last_started_at=NOW - timedelta(minutes=5),
+        last_success_at=NOW - timedelta(minutes=1),
+    )
+    with TestClient(create_app(repository, now=lambda: NOW, runtime=runtime)) as test_client:
         yield test_client
 
 
@@ -81,10 +88,32 @@ def test_health_serializes_stale_and_failed_sources(client):
                 "source": "helius",
                 "status": "failed",
                 "sampled_at": "2026-07-30T12:00:00+00:00",
-                "error": "RuntimeError",
+                "error": "source unavailable",
             },
         ]
     }
+
+
+def test_source_health_errors_are_fixed_safe_messages_in_health_and_dashboard(repository):
+    secret = "api-key=SECRET address=private-wallet"
+    repository.save_source_health("untrusted-source", NOW, secret)
+    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+        health = test_client.get("/api/health")
+        dashboard = test_client.get("/api/dashboard")
+
+    health_source = next(item for item in health.json()["sources"] if item["source"] == "untrusted-source")
+    dashboard_source = next(item for item in dashboard.json()["health"]["sources"] if item["source"] == "untrusted-source")
+    assert health_source["status"] == "failed"
+    assert health_source["error"] == "source unavailable"
+    assert dashboard_source == health_source
+    assert secret not in health.text
+    assert secret not in dashboard.text
+
+
+def test_source_health_preserves_stale_error_code(client):
+    response = client.get("/api/health")
+
+    assert response.json()["sources"][0]["error"] == "stale"
 
 
 def test_fresh_repository_serves_read_only_routes_without_network(tmp_path):
@@ -100,12 +129,68 @@ def test_dashboard_has_exact_top_level_shape_and_three_highest_signal_cards(clie
 
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload) == {"health", "today", "signals"}
+    assert set(payload) == {"health", "today", "signals", "wallet", "runtime"}
     assert payload["today"] == {"total": 5, "alerted": 4, "watch": 0, "rejected": 1}
     assert [signal["pool_address"] for signal in payload["signals"]] == [
         "pool-high", "pool-mid", "pool-fourth"
     ]
     assert payload["signals"][0]["advice"]["max_position_pct"] == 5
+    assert payload["wallet"] == {
+        "assets": [], "total_usd": None, "sampled_at": None,
+        "error": "wallet snapshot unavailable",
+    }
+    assert payload["runtime"] == {
+        "state": "running", "running": True, "interval_seconds": 30,
+        "last_started_at": "2026-07-30T11:55:00+00:00",
+        "last_success_at": "2026-07-30T11:59:00+00:00",
+        "last_failure_at": None, "wallet_error": None,
+    }
+
+
+def test_wallet_returns_latest_snapshot_without_wallet_address(repository):
+    repository.save_wallet_snapshot(WalletSnapshot(
+        "private-wallet-address", (WalletAsset("mint-1", "<SOL>", 2.5, 100, 250),),
+        250, NOW, None,
+    ))
+    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+        response = test_client.get("/api/wallet")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "assets": [{"mint_address": "mint-1", "symbol": "<SOL>", "quantity": 2.5,
+                    "price_usd": 100, "usd_value": 250}],
+        "total_usd": 250, "sampled_at": "2026-07-30T12:00:00+00:00", "error": None,
+    }
+    assert "private-wallet-address" not in response.text
+
+
+def test_wallet_without_snapshot_returns_safe_unavailable_payload(repository):
+    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+        response = test_client.get("/api/wallet")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "assets": [], "total_usd": None, "sampled_at": None,
+        "error": "wallet snapshot unavailable",
+    }
+
+
+def test_wallet_and_runtime_errors_are_fixed_safe_messages(repository):
+    secret = "address=wallet-private&token=api-key-SECRET"
+    repository.save_wallet_snapshot(WalletSnapshot(
+        "wallet-private", (), None, NOW, f"RPC failed: {secret}",
+    ))
+    runtime = RuntimeStatus(interval_seconds=30, wallet_error=f"request failed: {secret}")
+    with TestClient(create_app(repository, now=lambda: NOW, runtime=runtime)) as test_client:
+        wallet = test_client.get("/api/wallet")
+        dashboard = test_client.get("/api/dashboard")
+
+    assert wallet.json()["error"] == "wallet data unavailable"
+    assert dashboard.json()["wallet"]["error"] == "wallet data unavailable"
+    assert dashboard.json()["runtime"]["wallet_error"] == "wallet scan failed"
+    assert secret not in wallet.text
+    assert secret not in dashboard.text
+    assert "wallet-private" not in dashboard.text
 
 
 def test_dashboard_today_counts_only_decisions_from_current_calendar_day(repository):
@@ -174,13 +259,14 @@ def test_history_returns_serializable_full_signal_history(client):
     assert payload["signals"][0]["observed_at"].endswith("+00:00")
 
 
-def test_root_serves_read_only_dashboard_without_wallet_or_order_actions(client):
+def test_root_serves_chinese_read_only_dashboard_without_wallet_actions(client):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Golden Dog Finder" in response.text
-    assert "wallet" not in response.text.lower()
-    assert "order" not in response.text.lower()
+    for required in ("钱包总额", "系统状态", "信号摘要", "钱包资产", "运行状态", "数据源状态"):
+        assert required in response.text
+    for forbidden in ("connect wallet", "sign transaction", "place order", "buy token", "sell token", "连接钱包", "签名交易", "下单", "买入", "卖出"):
+        assert forbidden not in response.text.lower()
 
 
 def test_static_dashboard_loads_signal_detail_with_evidence_advice_risks_and_link(client):
@@ -189,3 +275,7 @@ def test_static_dashboard_loads_signal_detail_with_evidence_advice_risks_and_lin
     assert script.status_code == 200
     for required in ("loadSignalDetail", "reasons", "risk_flags", "advice", "dexscreener_url", "sampled_at", "error"):
         assert required in script.text
+    for required in ("钱包资产", "运行状态", "数据源状态", "escapeHtml", "<table"):
+        assert required in script.text
+    for forbidden in ("connect wallet", "sign transaction", "place order", "buy token", "sell token"):
+        assert forbidden not in script.text.lower()

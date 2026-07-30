@@ -7,3 +7,8 @@ section { margin-top: 2rem; } #summary, #signals, #health { display: flex; gap: 
 .card { display: grid; gap: .3rem; min-width: 11rem; border: 0; border-left: 3px solid #e0ad3b; color: inherit; text-align: left; cursor: pointer; }
 .detail-card { max-width: 48rem; }.detail-card h3, .detail-card h4 { margin: .3rem 0; }.detail-card ul { margin-top: .25rem; }
 .healthy { border-left: 3px solid #42c88a; }.stale { border-left: 3px solid #e0ad3b; }.failed { border-left: 3px solid #e05959; }
+.panel { display: grid; gap: .35rem; background: #1b2534; border-radius: .5rem; padding: .75rem; }
+.asset-table { overflow-x: auto; background: #1b2534; border-radius: .5rem; }
+table { width: 100%; border-collapse: collapse; min-width: 32rem; }
+th, td { padding: .7rem; border-bottom: 1px solid #314055; text-align: left; }
+th { color: #aeb9c8; font-weight: 600; }

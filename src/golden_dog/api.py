@@ -11,8 +11,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .models import Decision
+from .models import Decision, WalletSnapshot
 from .repository import Repository, SourceHealth
+from .runtime import RuntimeStatus
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -25,6 +26,22 @@ RISK_GATE_REASONS = frozenset((
     "critical enrichment unavailable",
     "pool older than 4 hours",
 ))
+WALLET_UNAVAILABLE = "wallet data unavailable"
+WALLET_SCAN_FAILED = "wallet scan failed"
+SOURCE_UNAVAILABLE = "source unavailable"
+STALE_ERROR_CODES = frozenset(("stale",))
+
+
+def _safe_error(
+    error: str | None,
+    fallback: str,
+    *,
+    allowed: frozenset[str] = frozenset(),
+) -> str | None:
+    """Return only reviewed status codes; persisted errors can contain secrets."""
+    if error is None:
+        return None
+    return error if error in allowed else fallback
 
 
 def _health_item(source: str, health: SourceHealth) -> dict[str, str | None]:
@@ -33,7 +50,7 @@ def _health_item(source: str, health: SourceHealth) -> dict[str, str | None]:
         "source": source,
         "status": status,
         "sampled_at": health.sampled_at.isoformat(),
-        "error": health.error,
+        "error": _safe_error(health.error, SOURCE_UNAVAILABLE, allowed=STALE_ERROR_CODES),
     }
 
 
@@ -61,7 +78,47 @@ def _decision_payload(decision: Decision, *, detail: bool = False) -> dict[str, 
     return payload
 
 
-def create_app(repository: Repository, now: Callable[[], datetime] = datetime.now) -> FastAPI:
+def _wallet_payload(snapshot: WalletSnapshot | None) -> dict[str, object]:
+    """Serialize persisted wallet data without exposing its watched address."""
+    if snapshot is None:
+        return {
+            "assets": [],
+            "total_usd": None,
+            "sampled_at": None,
+            "error": "wallet snapshot unavailable",
+        }
+    return {
+        "assets": [asdict(asset) for asset in snapshot.assets],
+        "total_usd": snapshot.total_usd,
+        "sampled_at": snapshot.sampled_at.isoformat(),
+        "error": _safe_error(snapshot.error, WALLET_UNAVAILABLE),
+    }
+
+
+def _runtime_payload(runtime: RuntimeStatus | None) -> dict[str, object]:
+    """Expose scanner health only; runtime intentionally contains no credentials or address."""
+    if runtime is None:
+        return {
+            "state": "stopped", "running": False, "interval_seconds": None,
+            "last_started_at": None, "last_success_at": None, "last_failure_at": None,
+            "wallet_error": None,
+        }
+    return {
+        "state": runtime.state.value,
+        "running": runtime.running,
+        "interval_seconds": runtime.interval_seconds,
+        "last_started_at": runtime.last_started_at.isoformat() if runtime.last_started_at else None,
+        "last_success_at": runtime.last_success_at.isoformat() if runtime.last_success_at else None,
+        "last_failure_at": runtime.last_failure_at.isoformat() if runtime.last_failure_at else None,
+        "wallet_error": _safe_error(runtime.wallet_error, WALLET_SCAN_FAILED),
+    }
+
+
+def create_app(
+    repository: Repository,
+    now: Callable[[], datetime] = datetime.now,
+    runtime: RuntimeStatus | None = None,
+) -> FastAPI:
     """Create an app backed by a schema-ready repository; no scanner lifecycle is started."""
     repository.initialize()
     app = FastAPI(title="Golden Dog Finder", version="0.1.0")
@@ -89,7 +146,13 @@ def create_app(repository: Repository, now: Callable[[], datetime] = datetime.no
             "health": {"sources": [_health_item(name, value) for name, value in sorted(sources.items())]},
             "today": {"total": len(today_decisions), **counts},
             "signals": [_decision_payload(item) for item in repository.top_signals(3)],
+            "wallet": _wallet_payload(repository.latest_wallet_snapshot()),
+            "runtime": _runtime_payload(runtime),
         }
+
+    @app.get("/api/wallet")
+    def wallet() -> dict[str, object]:
+        return _wallet_payload(repository.latest_wallet_snapshot())
 
     @app.get("/api/signals/{pool_address}")
     def signal_detail(pool_address: str) -> dict[str, object]:

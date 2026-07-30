@@ -76,8 +76,8 @@ def create_runtime_app(
     runtime: RuntimeStatus | None = None,
 ) -> FastAPI:
     """Create an app whose scanner is started and stopped with its ASGI lifespan."""
-    app = create_app(repository)
     runtime = runtime or RuntimeStatus(interval_seconds=interval_seconds)
+    app = create_app(repository, runtime=runtime)
     app.state.runtime = runtime
 
     async def logged_scan() -> None:

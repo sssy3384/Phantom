@@ -63,6 +63,19 @@ async def test_bark_notifier_skips_delivery_without_credentials(caplog):
 
 
 @pytest.mark.asyncio
+async def test_bark_notifier_reports_only_safe_delivery_result_to_runtime_callback(httpx_mock):
+    results: list[bool] = []
+    httpx_mock.add_response(url="https://api.day.app/device-1", status_code=503)
+    async with httpx.AsyncClient() as client:
+        notifier = BarkNotifier(
+            client, "https://api.day.app", "device-1", on_delivery_result=results.append,
+        )
+        assert await notifier.notify(candidate(), decision()) is False
+
+    assert results == [False]
+
+
+@pytest.mark.asyncio
 async def test_bark_http_error_log_does_not_expose_device_key(httpx_mock, caplog):
     caplog.set_level(logging.WARNING)
     httpx_mock.add_response(url="https://api.day.app/device-secret", status_code=503)

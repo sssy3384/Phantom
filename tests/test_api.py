@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 import importlib
 import inspect
+import sqlite3
 
 from fastapi.testclient import TestClient
 import pytest
@@ -67,6 +68,7 @@ def client(repository):
         state=RuntimeState.RUNNING,
         last_started_at=NOW - timedelta(minutes=5),
         last_success_at=NOW - timedelta(minutes=1),
+        bark_configured=True,
     )
     with TestClient(create_app(repository, now=lambda: NOW, runtime=runtime)) as test_client:
         yield test_client
@@ -144,7 +146,68 @@ def test_dashboard_has_exact_top_level_shape_and_three_highest_signal_cards(clie
         "last_started_at": "2026-07-30T11:55:00+00:00",
         "last_success_at": "2026-07-30T11:59:00+00:00",
         "last_failure_at": None, "wallet_error": None,
+        "next_scan_at": "2026-07-30T11:59:30+00:00",
+        "bark": {
+            "configured": True, "configuration": "已配置",
+            "delivery_status": None, "last_delivery_at": None,
+        },
+        "database": {"status": "healthy"},
     }
+
+
+def test_dashboard_reports_unavailable_database_without_raw_probe_error(repository, monkeypatch):
+    monkeypatch.setattr(repository, "is_healthy", lambda: False, raising=False)
+    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+        response = test_client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    assert response.json()["runtime"]["database"] == {"status": "unavailable"}
+
+
+def test_dashboard_degrades_safely_when_a_repository_read_raises(repository, monkeypatch):
+    def broken_read():
+        raise sqlite3.OperationalError("database key=SECRET")
+
+    monkeypatch.setattr(repository, "decisions", broken_read)
+    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+        response = test_client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    assert response.json()["signals"] == []
+    assert response.json()["wallet"] == {
+        "assets": [], "total_usd": None, "sampled_at": None,
+        "error": "wallet snapshot unavailable",
+    }
+    assert response.json()["runtime"]["database"] == {"status": "unavailable"}
+    assert "key=SECRET" not in response.text
+
+
+def test_all_read_routes_degrade_without_exposing_database_errors(repository, monkeypatch):
+    app = create_app(repository, now=lambda: NOW)
+
+    def broken_connection():
+        raise sqlite3.OperationalError("database key=SECRET")
+
+    monkeypatch.setattr(repository, "_connect", broken_connection)
+    with TestClient(app) as test_client:
+        wallet = test_client.get("/api/wallet")
+        health = test_client.get("/api/health")
+        history = test_client.get("/api/history")
+        signal = test_client.get("/api/signals/pool-high")
+
+    assert wallet.status_code == 200
+    assert wallet.json() == {
+        "assets": [], "total_usd": None, "sampled_at": None,
+        "error": "wallet snapshot unavailable",
+    }
+    assert health.status_code == 200
+    assert health.json() == {"sources": [], "database": {"status": "unavailable"}}
+    assert history.status_code == 200
+    assert history.json() == {"signals": [], "database": {"status": "unavailable"}}
+    assert signal.status_code == 503
+    assert signal.json() == {"detail": "service unavailable"}
+    for response in (wallet, health, history, signal):
+        assert "key=SECRET" not in response.text
 
 
 def test_wallet_returns_latest_snapshot_without_wallet_address(repository):
@@ -275,7 +338,7 @@ def test_static_dashboard_loads_signal_detail_with_evidence_advice_risks_and_lin
     assert script.status_code == 200
     for required in ("loadSignalDetail", "reasons", "risk_flags", "advice", "dexscreener_url", "sampled_at", "error"):
         assert required in script.text
-    for required in ("钱包资产", "运行状态", "数据源状态", "escapeHtml", "<table"):
+    for required in ("钱包资产", "运行状态", "数据源状态", "下一次扫描", "Bark 配置", "暂无投递数据", "escapeHtml", "<table"):
         assert required in script.text
     for forbidden in ("connect wallet", "sign transaction", "place order", "buy token", "sell token"):
         assert forbidden not in script.text.lower()

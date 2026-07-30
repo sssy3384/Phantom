@@ -95,6 +95,15 @@ class Repository:
             if "owner_token" not in columns:
                 connection.execute("ALTER TABLE alert_reservations ADD COLUMN owner_token TEXT")
 
+    def is_healthy(self) -> bool:
+        """Safely probe SQLite availability without exposing connection errors."""
+        try:
+            with self._connect() as connection:
+                connection.execute("SELECT 1").fetchone()
+        except (OSError, sqlite3.Error):
+            return False
+        return True
+
     def save_decision(self, decision: Decision) -> None:
         advice_json = None
         if decision.advice is not None:

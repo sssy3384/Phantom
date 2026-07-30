@@ -17,9 +17,12 @@ function renderRuntime(runtime, sources) {
   const helius = sources.find((source) => source.source === "helius");
   document.querySelector("#runtime").innerHTML = [
     ["运行状态", statusText(runtime.state)], ["扫描间隔", `${runtime.interval_seconds ?? "-"} 秒`],
-    ["最近成功", runtime.last_success_at], ["钱包采样", runtime.wallet_error || "正常"],
+    ["最近成功", runtime.last_success_at], ["下一次扫描", runtime.next_scan_at],
+    ["钱包采样", runtime.wallet_error || "正常"],
     ["Helius", helius ? statusText(helius.status) : "暂无样本"],
-    ["Bark", "暂无运行数据"], ["数据库", "已连接"],
+    ["Bark 配置", runtime.bark.configuration],
+    ["Bark 投递", runtime.bark.delivery_status || "暂无投递数据"],
+    ["Bark 最近投递", runtime.bark.last_delivery_at], ["数据库", runtime.database.status],
   ].map(([label, value]) => `<span class="health"><b>${escapeHtml(label)}</b>：${escapeHtml(value)}</span>`).join("");
 }
 

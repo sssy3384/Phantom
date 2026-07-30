@@ -42,8 +42,10 @@ async def run_combined_scan(
     wallet_scan: ScanOnce,
     runtime: RuntimeStatus,
     now: datetime,
+    completed_now: Callable[[], datetime] | None = None,
 ) -> None:
     """Run signals first; wallet sampling never interrupts signal scanning."""
+    completed_now = completed_now or (lambda: datetime.now(UTC))
     runtime.state = RuntimeState.RUNNING
     runtime.last_started_at = now
     try:
@@ -51,21 +53,21 @@ async def run_combined_scan(
     except asyncio.CancelledError:
         raise
     except Exception:
-        runtime.last_failure_at = now
+        runtime.last_failure_at = completed_now()
         raise
 
-    runtime.last_success_at = now
     try:
         wallet_result = await wallet_scan()
     except asyncio.CancelledError:
         raise
     except Exception as error:
         runtime.wallet_error = type(error).__name__
-        runtime.last_failure_at = now
+        runtime.last_failure_at = completed_now()
     else:
         runtime.wallet_error = getattr(wallet_result, "error", None)
         if runtime.wallet_error is not None:
-            runtime.last_failure_at = now
+            runtime.last_failure_at = completed_now()
+    runtime.last_success_at = completed_now()
 
 
 def create_runtime_app(
@@ -129,13 +131,23 @@ def build_service(settings: Settings) -> tuple[SignalService, httpx.AsyncClient]
 def create_default_app(settings: Settings | None = None) -> FastAPI:
     """Build the configured runtime without performing network I/O at import time."""
     settings = settings or Settings.from_env()
+    runtime = RuntimeStatus(
+        interval_seconds=settings.scan_interval_seconds,
+        bark_configured=bool(settings.bark_device_key),
+    )
+
+    def record_bark_delivery(delivered: bool) -> None:
+        runtime.record_bark_delivery(delivered, datetime.now(UTC))
+
     service, client = build_service(settings)
+    notifier = getattr(service, "notifier", None)
+    if isinstance(notifier, BarkNotifier):
+        notifier.on_delivery_result = record_bark_delivery
     wallet_service = WalletService(
         service.repository,
         WalletClient(client, settings.helius_api_key),
         DexPriceClient(client),
     )
-    runtime = RuntimeStatus(interval_seconds=settings.scan_interval_seconds)
 
     async def signal_scan() -> object:
         return await service.scan_once(datetime.now(UTC))
@@ -145,7 +157,9 @@ def create_default_app(settings: Settings | None = None) -> FastAPI:
 
     async def scan_once() -> None:
         now = datetime.now(UTC)
-        await run_combined_scan(signal_scan, wallet_scan, runtime, now)
+        await run_combined_scan(
+            signal_scan, wallet_scan, runtime, now, completed_now=lambda: datetime.now(UTC),
+        )
 
     app = create_runtime_app(
         service.repository,

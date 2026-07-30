@@ -131,6 +131,26 @@ class Repository:
             ).fetchall()
         return [self._decision_from_row(row) for row in rows]
 
+    def decision(self, pool_address: str) -> Decision | None:
+        """Return the latest decision for a pool."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM decisions WHERE pool_address = ?
+                ORDER BY observed_at DESC LIMIT 1
+                """,
+                (pool_address,),
+            ).fetchone()
+        return self._decision_from_row(row) if row is not None else None
+
+    def decisions(self) -> list[Decision]:
+        """Return persisted signal history, newest first."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM decisions ORDER BY observed_at DESC, pool_address ASC"
+            ).fetchall()
+        return [self._decision_from_row(row) for row in rows]
+
     def claim_alert(self, pool_address: str, now: int) -> bool:
         with self._connect() as connection:
             row = connection.execute(

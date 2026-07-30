@@ -1,0 +1,9 @@
+:root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background: #10151f; color: #e8edf5; }
+body { margin: 0; }
+main { max-width: 900px; margin: auto; padding: 2rem; }
+h1 { margin-bottom: .2rem; } p { color: #aeb9c8; }
+section { margin-top: 2rem; } #summary, #signals, #health { display: flex; gap: .75rem; flex-wrap: wrap; }
+.summary-item, .card, .health, .detail-card { background: #1b2534; border-radius: .5rem; padding: .75rem; }
+.card { display: grid; gap: .3rem; min-width: 11rem; border: 0; border-left: 3px solid #e0ad3b; color: inherit; text-align: left; cursor: pointer; }
+.detail-card { max-width: 48rem; }.detail-card h3, .detail-card h4 { margin: .3rem 0; }.detail-card ul { margin-top: .25rem; }
+.healthy { border-left: 3px solid #42c88a; }.stale { border-left: 3px solid #e0ad3b; }.failed { border-left: 3px solid #e05959; }

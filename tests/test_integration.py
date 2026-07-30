@@ -1,6 +1,7 @@
 """Runtime integration tests for the background signal scanner."""
 
 import asyncio
+import logging
 from threading import Event
 
 import pytest
@@ -51,6 +52,32 @@ def test_runtime_lifespan_continues_after_failure_and_stops_scanner(tmp_path):
     task = app.state.scan_task
     assert task.done()
     assert task.cancelled()
+
+
+def test_runtime_lifespan_redacts_signal_error_and_continues_scanning(caplog, tmp_path):
+    calls = 0
+    secret = "api-key=top-secret"
+    address = "wallet-address-123"
+
+    async def scan_once():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError(f"source failed https://rpc.example/?{secret}&address={address}")
+
+    app = create_runtime_app(
+        Repository(tmp_path / "signals.sqlite3"), scan_once, interval_seconds=0.001
+    )
+    with caplog.at_level(logging.ERROR, logger="golden_dog.main"):
+        with TestClient(app) as client:
+            while calls < 2:
+                client.get("/api/health")
+
+    assert "RuntimeError" in caplog.text
+    assert secret not in caplog.text
+    assert address not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+    assert calls >= 2
 
 
 def test_default_lifespan_cancels_scanner_before_closing_http_client(monkeypatch, tmp_path):

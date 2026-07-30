@@ -17,6 +17,7 @@ class Candidate:
     buys_m5: int
     sells_m5: int
     price_change_m5_pct: float
+    price_usd: float = 0.0
 
 
 @dataclass(frozen=True)

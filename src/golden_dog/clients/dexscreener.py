@@ -48,4 +48,5 @@ class DexScreenerClient(SourceClient):
             buys_m5=int(txns.get("buys") or 0),
             sells_m5=int(txns.get("sells") or 0),
             price_change_m5_pct=float(pair.get("priceChange", {}).get("m5") or 0),
+            price_usd=float(pair.get("priceUsd") or 0),
         )

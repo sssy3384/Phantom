@@ -39,4 +39,5 @@ class GeckoTerminalClient(SourceClient):
             buys_m5=int(txns.get("buys") or 0),
             sells_m5=int(txns.get("sells") or 0),
             price_change_m5_pct=float(attributes.get("price_change_percentage", {}).get("m5") or 0),
+            price_usd=float(attributes.get("base_token_price_usd") or 0),
         )

@@ -37,3 +37,21 @@ class Decision:
     reasons: tuple[str, ...]
     advice: TradeAdvice | None
     observed_at: datetime
+
+
+@dataclass(frozen=True)
+class WalletAsset:
+    mint_address: str | None
+    symbol: str
+    quantity: float
+    price_usd: float | None
+    usd_value: float | None
+
+
+@dataclass(frozen=True)
+class WalletSnapshot:
+    address: str | None
+    assets: tuple[WalletAsset, ...]
+    total_usd: float | None
+    sampled_at: datetime
+    error: str | None

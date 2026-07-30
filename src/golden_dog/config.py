@@ -13,6 +13,7 @@ class Settings:
     database_path: Path
     scan_interval_seconds: int = 30
     alert_score: int = 85
+    watch_wallet_address: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -21,4 +22,5 @@ class Settings:
             bark_base_url=os.getenv("BARK_BASE_URL", "https://api.day.app").rstrip("/"),
             bark_device_key=os.getenv("BARK_DEVICE_KEY") or None,
             database_path=Path(os.getenv("DATABASE_PATH", "data/golden_dog.sqlite3")),
+            watch_wallet_address=os.getenv("WATCH_WALLET_ADDRESS") or None,
         )

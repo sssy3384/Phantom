@@ -85,6 +85,8 @@ def risk_flags(reasons: tuple[str, ...], *, rejected: bool = False) -> list[str]
 def _decision_payload(decision: Decision, *, detail: bool = False) -> dict[str, object]:
     payload: dict[str, object] = {
         "pool_address": decision.pool_address,
+        "token_address": decision.token_address,
+        "symbol": decision.symbol,
         "score": decision.score,
         "status": decision.status,
         "observed_at": decision.observed_at.isoformat(),

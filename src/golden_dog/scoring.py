@@ -49,11 +49,11 @@ def score(candidate: Candidate, enrichment: Enrichment | None, *, now: datetime)
     total = liquidity_score + trade_score + holder_score + momentum_score + social_score
     status = "alerted" if total >= 85 else "watch"
     advice = _advice(candidate) if status == "alerted" else None
-    return Decision(candidate.pool_address, total, status, tuple(reasons), advice, now)
+    return Decision(candidate.pool_address, total, status, tuple(reasons), advice, now, candidate.token_address, candidate.symbol)
 
 
 def _rejected(candidate: Candidate, now: datetime, reason: str) -> Decision:
-    return Decision(candidate.pool_address, 0, "rejected", (reason,), None, now)
+    return Decision(candidate.pool_address, 0, "rejected", (reason,), None, now, candidate.token_address, candidate.symbol)
 
 
 def _advice(candidate: Candidate) -> TradeAdvice:

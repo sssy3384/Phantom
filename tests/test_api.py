@@ -155,6 +155,23 @@ def test_dashboard_has_exact_top_level_shape_and_three_highest_signal_cards(clie
     }
 
 
+def test_signal_api_includes_persisted_token_metadata(repository):
+    repository.save_decision(Decision(
+        pool_address="pool-metadata", token_address="token-metadata", symbol="DOGE",
+        score=99, status="alerted", reasons=("quality",), advice=None, observed_at=NOW,
+    ))
+    with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
+        dashboard_signal = next(
+            item for item in test_client.get("/api/dashboard").json()["signals"]
+            if item["pool_address"] == "pool-metadata"
+        )
+        detail = test_client.get("/api/signals/pool-metadata").json()
+
+    assert dashboard_signal["token_address"] == "token-metadata"
+    assert dashboard_signal["symbol"] == "DOGE"
+    assert detail["dexscreener_url"] == "https://dexscreener.com/solana/pool-metadata"
+
+
 def test_dashboard_reports_unavailable_database_without_raw_probe_error(repository, monkeypatch):
     monkeypatch.setattr(repository, "is_healthy", lambda: False, raising=False)
     with TestClient(create_app(repository, now=lambda: NOW)) as test_client:
@@ -366,7 +383,15 @@ def test_static_dashboard_loads_signal_detail_with_evidence_advice_risks_and_lin
     assert script.status_code == 200
     for required in ("loadSignalDetail", "reasons", "risk_flags", "advice", "dexscreener_url", "sampled_at", "error"):
         assert required in script.text
-    for required in ("钱包资产", "运行状态", "数据源状态", "下一次扫描", "Bark 配置", "暂无投递数据", "escapeHtml", "<table"):
+    for required in ("钱包资产", "运行状态", "数据源状态", "下一次扫描", "Bark 配置", "暂无投递数据", "交易池", "代币 Mint", "symbol", "escapeHtml", "<table"):
         assert required in script.text
     for forbidden in ("connect wallet", "sign transaction", "place order", "buy token", "sell token"):
         assert forbidden not in script.text.lower()
+
+
+def test_dashboard_styles_wrap_runtime_statuses_and_long_addresses(client):
+    stylesheet = client.get("/static/styles.css")
+
+    assert stylesheet.status_code == 200
+    for required in ("#runtime", "flex-wrap: wrap", "overflow-wrap: anywhere", "@media (max-width: 480px)"):
+        assert required in stylesheet.text

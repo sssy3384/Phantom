@@ -37,6 +37,8 @@ class Decision:
     reasons: tuple[str, ...]
     advice: TradeAdvice | None
     observed_at: datetime
+    token_address: str | None = None
+    symbol: str | None = None
 
 
 @dataclass(frozen=True)

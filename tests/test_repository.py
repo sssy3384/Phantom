@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import sqlite3
 
 try:
     from golden_dog.models import Decision, TradeAdvice, WalletAsset, WalletSnapshot
@@ -37,6 +38,47 @@ def test_repository_keeps_snapshot_and_suppresses_duplicate_alert(tmp_path):
     assert repo.top_signals(limit=3)[0].pool_address == "pool-1"
     assert repo.claim_alert("pool-1", now=1_000) is True
     assert repo.claim_alert("pool-1", now=1_001) is False
+
+
+def test_top_signals_uses_only_each_pool_latest_alerted_decision(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    repo.initialize()
+    repo.save_decision(sample_decision("pool-kept", 91))
+    repo.save_decision(sample_decision("pool-duplicate", 99))
+    repo.save_decision(Decision(
+        pool_address="pool-duplicate", score=70, status="watch", reasons=("cooling",),
+        advice=None, observed_at=NOW + timedelta(minutes=1),
+    ))
+    repo.save_decision(Decision(
+        pool_address="pool-rejected", score=0, status="rejected", reasons=("risk",),
+        advice=None, observed_at=NOW + timedelta(minutes=1),
+    ))
+    repo.save_decision(sample_decision("pool-second", 90))
+
+    assert [decision.pool_address for decision in repo.top_signals(3)] == [
+        "pool-kept", "pool-second",
+    ]
+
+
+def test_initialize_adds_metadata_columns_to_existing_decisions_database(tmp_path):
+    database = tmp_path / "signals.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE decisions (
+                pool_address TEXT NOT NULL, observed_at TEXT NOT NULL, score INTEGER NOT NULL,
+                status TEXT NOT NULL, reasons_json TEXT NOT NULL, advice_json TEXT,
+                PRIMARY KEY (pool_address, observed_at)
+            )"""
+        )
+
+    repo = Repository(database)
+    repo.initialize()
+    repo.save_decision(Decision(
+        pool_address="pool-1", score=90, status="alerted", reasons=("quality",), advice=None,
+        observed_at=NOW, token_address="token-1", symbol="DOG",
+    ))
+
+    assert repo.decision("pool-1").token_address == "token-1"
 
 
 def test_repository_round_trips_latest_wallet_snapshot(tmp_path):

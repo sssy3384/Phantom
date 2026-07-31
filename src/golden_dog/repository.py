@@ -49,6 +49,8 @@ class Repository:
                     status TEXT NOT NULL,
                     reasons_json TEXT NOT NULL,
                     advice_json TEXT,
+                    token_address TEXT,
+                    symbol TEXT,
                     PRIMARY KEY (pool_address, observed_at)
                 );
                 CREATE TABLE IF NOT EXISTS alerts (
@@ -94,6 +96,13 @@ class Repository:
             }
             if "owner_token" not in columns:
                 connection.execute("ALTER TABLE alert_reservations ADD COLUMN owner_token TEXT")
+            decision_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(decisions)")
+            }
+            if "token_address" not in decision_columns:
+                connection.execute("ALTER TABLE decisions ADD COLUMN token_address TEXT")
+            if "symbol" not in decision_columns:
+                connection.execute("ALTER TABLE decisions ADD COLUMN symbol TEXT")
 
     def is_healthy(self) -> bool:
         """Safely probe SQLite availability without exposing connection errors."""
@@ -120,8 +129,8 @@ class Repository:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO decisions
-                (pool_address, observed_at, score, status, reasons_json, advice_json)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (pool_address, observed_at, score, status, reasons_json, advice_json, token_address, symbol)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision.pool_address,
@@ -130,6 +139,8 @@ class Repository:
                     decision.status,
                     json.dumps(decision.reasons),
                     advice_json,
+                    decision.token_address,
+                    decision.symbol,
                 ),
             )
 
@@ -195,8 +206,13 @@ class Repository:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT * FROM decisions
-                WHERE status = 'alerted'
+                SELECT * FROM (
+                    SELECT decisions.*, ROW_NUMBER() OVER (
+                        PARTITION BY pool_address ORDER BY observed_at DESC
+                    ) AS row_rank
+                    FROM decisions
+                )
+                WHERE row_rank = 1 AND status = 'alerted'
                 ORDER BY score DESC, observed_at DESC
                 LIMIT ?
                 """,
@@ -457,4 +473,6 @@ class Repository:
             reasons=tuple(json.loads(row["reasons_json"])),
             advice=advice,
             observed_at=datetime.fromisoformat(row["observed_at"]),
+            token_address=row["token_address"],
+            symbol=row["symbol"],
         )

@@ -1,14 +1,18 @@
 :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background: #10151f; color: #e8edf5; }
 body { margin: 0; }
-main { max-width: 900px; margin: auto; padding: 2rem; }
+main { max-width: 900px; margin: auto; padding: clamp(1rem, 4vw, 2rem); }
 h1 { margin-bottom: .2rem; } p { color: #aeb9c8; }
-section { margin-top: 2rem; } #summary, #signals, #health { display: flex; gap: .75rem; flex-wrap: wrap; }
+section { margin-top: 2rem; } #summary, #signals, #health, #runtime { display: flex; gap: .75rem; flex-wrap: wrap; }
 .summary-item, .card, .health, .detail-card { background: #1b2534; border-radius: .5rem; padding: .75rem; }
-.card { display: grid; gap: .3rem; min-width: 11rem; border: 0; border-left: 3px solid #e0ad3b; color: inherit; text-align: left; cursor: pointer; }
+.card { display: grid; gap: .3rem; min-width: min(100%, 11rem); flex: 1 1 12rem; border: 0; border-left: 3px solid #e0ad3b; color: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .detail-card { max-width: 48rem; }.detail-card h3, .detail-card h4 { margin: .3rem 0; }.detail-card ul { margin-top: .25rem; }
-.healthy { border-left: 3px solid #42c88a; }.stale { border-left: 3px solid #e0ad3b; }.failed { border-left: 3px solid #e05959; }
+.health { flex: 1 1 12rem; min-width: min(100%, 12rem); overflow-wrap: anywhere; }.healthy { border-left: 3px solid #42c88a; }.stale { border-left: 3px solid #e0ad3b; }.failed { border-left: 3px solid #e05959; }
+.health b { display: inline-block; margin-right: .2rem; }.health br + * { overflow-wrap: anywhere; }
+#runtime .health { flex: 1 1 10rem; display: grid; gap: .2rem; }
+.panel, .detail-card, .summary-item { overflow-wrap: anywhere; }
 .panel { display: grid; gap: .35rem; background: #1b2534; border-radius: .5rem; padding: .75rem; }
 .asset-table { overflow-x: auto; background: #1b2534; border-radius: .5rem; }
 table { width: 100%; border-collapse: collapse; min-width: 32rem; }
 th, td { padding: .7rem; border-bottom: 1px solid #314055; text-align: left; }
 th { color: #aeb9c8; font-weight: 600; }
+@media (max-width: 480px) { section { margin-top: 1.25rem; } .card, .health { flex-basis: 100%; } }

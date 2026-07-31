@@ -1,6 +1,6 @@
 const escapeHtml = (value) => String(value ?? "-").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
 
-const statusText = (status) => ({healthy: "正常", stale: "延迟", failed: "失败", running: "运行中", stopped: "已停止"}[status] || status || "未知");
+const statusText = (status) => ({healthy: "正常", stale: "延迟", failed: "失败", running: "运行中", stopped: "已停止", alerted: "已提醒", watch: "观察中", rejected: "已拒绝"}[status] || status || "未知");
 const sourceStatusTitle = "数据源状态";
 
 function renderWallet(wallet) {
@@ -36,7 +36,7 @@ async function loadDashboard() {
   renderWallet(dashboard.wallet);
   renderRuntime(dashboard.runtime, dashboard.health.sources);
   document.querySelector("#signals").innerHTML = dashboard.signals.map((signal) =>
-    `<button class="card" type="button" data-pool="${escapeHtml(signal.pool_address)}"><b>${escapeHtml(signal.pool_address)}</b><span>评分 ${escapeHtml(signal.score)}</span><span>${escapeHtml(signal.status)}</span></button>`
+    `<button class="card" type="button" data-pool="${escapeHtml(signal.pool_address)}"><b>${escapeHtml(signal.symbol || "未知代币")}</b><span>交易池：${escapeHtml(signal.pool_address)}</span><span>评分：${escapeHtml(signal.score)}</span><span>状态：${escapeHtml(statusText(signal.status))}</span></button>`
   ).join("") || "<p>暂无合格信号。</p>";
   document.querySelectorAll("[data-pool]").forEach((card) => {
     card.addEventListener("click", () => loadSignalDetail(card.dataset.pool));
@@ -55,7 +55,8 @@ async function loadSignalDetail(poolAddress) {
   const advice = signal.advice
     ? `入场上限：$${escapeHtml(signal.advice.entry_ceiling_usd)} · 最大仓位：${escapeHtml(signal.advice.max_position_pct)}% · 止损：${escapeHtml(signal.advice.stop_loss_pct)}% · 止盈：${escapeHtml(signal.advice.take_profit_pcts.join(" / "))}% · 失效条件：${escapeHtml(signal.advice.invalidation)}`
     : "暂无交易建议。";
-  detail.innerHTML = `<article class="detail-card"><h3>${escapeHtml(signal.pool_address)}</h3><h4>评分证据</h4><ul>${signal.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul><h4>风险标记</h4><ul>${signal.risk_flags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join("") || "<li>无</li>"}</ul><h4>建议</h4><p>${advice}</p><a href="${escapeHtml(signal.dexscreener_url)}" target="_blank" rel="noopener noreferrer">在 DexScreener 查看</a></article>`;
+  const tokenMint = signal.token_address ? `<p>代币 Mint：${escapeHtml(signal.token_address)}</p>` : "";
+  detail.innerHTML = `<article class="detail-card"><h3>${escapeHtml(signal.symbol || "未知代币")}</h3><p>交易池：${escapeHtml(signal.pool_address)}</p>${tokenMint}<h4>评分证据</h4><ul>${signal.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul><h4>风险标记</h4><ul>${signal.risk_flags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join("") || "<li>无</li>"}</ul><h4>建议</h4><p>${advice}</p><a href="${escapeHtml(signal.dexscreener_url)}" target="_blank" rel="noopener noreferrer">在 DexScreener 查看交易池</a></article>`;
 }
 
 loadDashboard().catch((error) => { document.querySelector("#signals").textContent = error.message; });

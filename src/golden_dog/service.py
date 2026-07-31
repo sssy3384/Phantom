@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Callable, Iterable, Protocol
 
@@ -65,6 +66,11 @@ class SignalService:
             decision = self.scorer(candidate, now=now)
             if inspect.isawaitable(decision):
                 decision = await decision
+            decision = replace(
+                decision,
+                token_address=candidate.token_address,
+                symbol=candidate.symbol,
+            )
             self.repository.save_decision(decision)
             scored.append((candidate, decision))
 

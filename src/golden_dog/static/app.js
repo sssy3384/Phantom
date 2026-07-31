@@ -24,7 +24,7 @@ function renderRuntime(runtime, sources) {
     ["Bark 配置", runtime.bark.configuration],
     ["Bark 投递", runtime.bark.delivery_status || "暂无投递数据"],
     ["Bark 最近投递", runtime.bark.last_delivery_at], ["数据库", runtime.database.status],
-  ].map(([label, value]) => `<span class="health"><b>${escapeHtml(label)}</b>：${escapeHtml(value)}</span>`).join("");
+  ].map(([label, value]) => `<span class="health runtime-item"><b class="runtime-label">${escapeHtml(label)}</b><span class="runtime-value">${escapeHtml(value)}</span></span>`).join("");
 }
 
 async function loadDashboard() {

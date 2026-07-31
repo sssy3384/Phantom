@@ -26,11 +26,13 @@ class GeckoTerminalClient(SourceClient):
     @staticmethod
     def _normalize_pool(pool: dict, discovered_at: datetime) -> Candidate:
         attributes = pool["attributes"]
+        relationship_id = pool.get("relationships", {}).get("base_token", {}).get("data", {}).get("id")
+        token_address = attributes.get("base_token_address") or relationship_id.split("_", 1)[-1]
         txns = attributes.get("transactions", {}).get("m5", {})
         created_at = datetime.fromisoformat(attributes["pool_created_at"].replace("Z", "+00:00"))
         return Candidate(
             pool_address=attributes["address"],
-            token_address=attributes["base_token_address"],
+            token_address=token_address,
             symbol=attributes.get("name", "UNKNOWN").split(" / ")[0],
             discovered_at=discovered_at,
             pool_created_at=created_at,

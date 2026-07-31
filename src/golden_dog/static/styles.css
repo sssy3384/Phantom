@@ -8,7 +8,10 @@ section { margin-top: 2rem; } #summary, #signals, #health, #runtime { display: f
 .detail-card { max-width: 48rem; }.detail-card h3, .detail-card h4 { margin: .3rem 0; }.detail-card ul { margin-top: .25rem; }
 .health { flex: 1 1 12rem; min-width: min(100%, 12rem); overflow-wrap: anywhere; }.healthy { border-left: 3px solid #42c88a; }.stale { border-left: 3px solid #e0ad3b; }.failed { border-left: 3px solid #e05959; }
 .health b { display: inline-block; margin-right: .2rem; }.health br + * { overflow-wrap: anywhere; }
-#runtime .health { flex: 1 1 10rem; display: grid; gap: .2rem; }
+#runtime .health { flex: 1 1 12rem; min-width: 0; }
+.runtime-item { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; gap: .35rem; }
+.runtime-label { white-space: nowrap; }
+.runtime-value { min-width: 0; overflow-wrap: anywhere; }
 .panel, .detail-card, .summary-item { overflow-wrap: anywhere; }
 .panel { display: grid; gap: .35rem; background: #1b2534; border-radius: .5rem; padding: .75rem; }
 .asset-table { overflow-x: auto; background: #1b2534; border-radius: .5rem; }

@@ -24,8 +24,11 @@ class DexScreenerClient(SourceClient):
             ]
             candidates: list[Candidate] = []
             for token_address in dict.fromkeys(tokens):
-                pairs = await self.get_json(self.token_pairs_url.format(token_address=token_address))
-                candidates.extend(self._normalize_pair(pair, sampled_at) for pair in pairs)
+                try:
+                    pairs = await self.get_json(self.token_pairs_url.format(token_address=token_address))
+                    candidates.extend(self._normalize_pair(pair, sampled_at) for pair in pairs)
+                except (httpx.HTTPError, KeyError, TypeError, ValueError):
+                    continue
             unique = {candidate.pool_address: candidate for candidate in candidates}
             return SourceResult(tuple(unique.values()), sampled_at, self.source)
         except httpx.TimeoutException:

@@ -383,10 +383,20 @@ def test_static_dashboard_loads_signal_detail_with_evidence_advice_risks_and_lin
     assert script.status_code == 200
     for required in ("loadSignalDetail", "reasons", "risk_flags", "advice", "dexscreener_url", "sampled_at", "error"):
         assert required in script.text
+
+
+def test_runtime_cards_use_explicit_label_and_value_elements(client):
+    script = client.get("/static/app.js").text
+    stylesheet = client.get("/static/styles.css").text
+
+    assert 'class="runtime-label"' in script
+    assert 'class="runtime-value"' in script
+    assert ".runtime-label" in stylesheet
+    assert ".runtime-value" in stylesheet
     for required in ("钱包资产", "运行状态", "数据源状态", "下一次扫描", "Bark 配置", "暂无投递数据", "交易池", "代币 Mint", "symbol", "escapeHtml", "<table"):
-        assert required in script.text
+        assert required in script
     for forbidden in ("connect wallet", "sign transaction", "place order", "buy token", "sell token"):
-        assert forbidden not in script.text.lower()
+        assert forbidden not in script.lower()
 
 
 def test_dashboard_styles_wrap_runtime_statuses_and_long_addresses(client):

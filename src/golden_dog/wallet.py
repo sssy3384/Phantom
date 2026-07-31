@@ -41,14 +41,22 @@ class WalletService:
 
         mints = tuple(
             dict.fromkeys(
-                mint for asset in balance.assets if (mint := self._price_mint(asset)) is not None
+                mint
+                for asset in balance.assets
+                if asset.price_usd is None
+                and (mint := self._price_mint(asset)) is not None
             )
         )
         quote_by_mint = await self.prices.prices(mints)
         assets = tuple(
             sorted(
                 (
-                    self._value_asset(asset, quote_by_mint.get(self._price_mint(asset)))
+                    self._value_asset(
+                        asset,
+                        asset.price_usd
+                        if asset.price_usd is not None
+                        else quote_by_mint.get(self._price_mint(asset)),
+                    )
                     for asset in balance.assets
                 ),
                 key=lambda asset: (

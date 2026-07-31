@@ -285,6 +285,35 @@ async def test_wallet_service_keeps_assets_without_price_and_sorts_by_usd(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_wallet_service_preserves_das_prices_and_quotes_only_missing_mints(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    raw = WalletSnapshot(
+        "wallet-1",
+        (
+            WalletAsset("mint-das", "DAS", 2.0, 3.0, None),
+            WalletAsset("mint-missing", "MISSING", 3.0, None, None),
+            WalletAsset(None, "SOL", 1.0, None, None),
+            WalletAsset("mint-missing", "MISSING", 1.0, None, None),
+        ),
+        None,
+        datetime(2000, 1, 1, tzinfo=UTC),
+        None,
+    )
+    wrapped_sol_mint = "So11111111111111111111111111111111111111112"
+    prices = PriceStub({"mint-das": 99.0, "mint-missing": 1.5, wrapped_sol_mint: 150.25})
+
+    snapshot = await WalletService(repo, BalanceStub(raw), prices).sample(
+        "wallet-1", datetime(2026, 7, 30, tzinfo=UTC)
+    )
+
+    assert prices.requests == [("mint-missing", wrapped_sol_mint)]
+    assert {asset.symbol: asset for asset in snapshot.assets}["DAS"] == WalletAsset(
+        "mint-das", "DAS", 2.0, 3.0, 6.0
+    )
+    assert snapshot.total_usd == 162.25
+
+
+@pytest.mark.asyncio
 async def test_wallet_service_values_native_sol_with_wrapped_sol_price(tmp_path):
     repo = Repository(tmp_path / "signals.sqlite3")
     raw = WalletSnapshot(

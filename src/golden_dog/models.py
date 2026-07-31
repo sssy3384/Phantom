@@ -57,3 +57,4 @@ class WalletSnapshot:
     total_usd: float | None
     sampled_at: datetime
     error: str | None
+    partial: bool = False

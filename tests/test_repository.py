@@ -96,3 +96,19 @@ def test_repository_round_trips_latest_wallet_snapshot(tmp_path):
     repo.save_wallet_snapshot(earlier)
 
     assert repo.latest_wallet_snapshot() == latest
+
+
+def test_repository_reads_old_wallet_snapshot_as_non_partial(tmp_path):
+    repo = Repository(tmp_path / "signals.sqlite3")
+    repo.initialize()
+    old_payload = {
+        "address": "wallet-1", "assets": [], "total_usd": None,
+        "sampled_at": NOW.isoformat(), "error": None,
+    }
+    with repo._connect() as connection:
+        connection.execute(
+            "INSERT INTO wallet_snapshots (sampled_at, address, payload_json, error) VALUES (?, ?, ?, ?)",
+            (NOW.isoformat(), "wallet-1", __import__("json").dumps(old_payload), None),
+        )
+
+    assert repo.latest_wallet_snapshot().partial is False

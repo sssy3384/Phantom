@@ -59,7 +59,9 @@ class WalletService:
         )
         known_values = [asset.usd_value for asset in assets if asset.usd_value is not None]
         total_usd = round(sum(known_values), 2) if known_values else None
-        return self._save(WalletSnapshot(configured_address, assets, total_usd, now, None))
+        return self._save(
+            WalletSnapshot(configured_address, assets, total_usd, now, None, balance.partial)
+        )
 
     def _save(self, snapshot: WalletSnapshot) -> WalletSnapshot:
         self.repository.save_wallet_snapshot(snapshot)

@@ -113,6 +113,7 @@ def _wallet_payload(
             "total_usd": None,
             "sampled_at": None,
             "stale": False,
+            "partial": False,
             "error": (
                 _safe_error(latest_error, WALLET_UNAVAILABLE)
                 if latest_outcome is not None else "wallet snapshot unavailable"
@@ -124,6 +125,7 @@ def _wallet_payload(
         "total_usd": successful_snapshot.total_usd,
         "sampled_at": successful_snapshot.sampled_at.isoformat(),
         "stale": latest_error is not None,
+        "partial": successful_snapshot.partial,
         "error": _safe_error(latest_error, WALLET_UNAVAILABLE),
     }
 

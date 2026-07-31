@@ -1,10 +1,13 @@
 """Read-only public wallet balance and price clients."""
 
 from datetime import UTC, datetime
+import json
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
+from golden_dog.api import create_app
 from golden_dog.clients.prices import DexPriceClient
 from golden_dog.clients.wallet import WalletClient
 from golden_dog.config import Settings
@@ -25,6 +28,8 @@ def test_wallet_models_are_immutable():
 
     with pytest.raises(AttributeError):
         snapshot.address = "wallet-2"  # type: ignore[misc]
+
+    assert snapshot.partial is False
 
 
 @pytest.mark.asyncio
@@ -50,41 +55,25 @@ async def test_wallet_client_returns_none_for_rpc_error(httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_wallet_client_returns_sol_and_nonzero_spl_assets(httpx_mock):
+async def test_wallet_client_returns_sol_and_paginated_das_fungible_assets(httpx_mock):
     url = "https://mainnet.helius-rpc.com/?api-key=secret"
     httpx_mock.add_response(url=url, json={"result": {"value": 2_500_000_000}})
     httpx_mock.add_response(
         url=url,
         json={
-            "result": {
-                "value": [
-                    {
-                        "account": {
-                            "data": {
-                                "parsed": {
-                                    "info": {
-                                        "mint": "mint-1",
-                                        "tokenAmount": {"uiAmount": 4.5},
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    {
-                        "account": {
-                            "data": {
-                                "parsed": {
-                                    "info": {
-                                        "mint": "empty-mint",
-                                        "tokenAmount": {"uiAmount": 0},
-                                    }
-                                }
-                            }
-                        }
-                    },
-                ]
-            }
+            "result": {"items": [
+                {"id": "mint-1", "interface": "FungibleToken", "content": {"metadata": {"symbol": "ONE"}}, "token_info": {"balance": 4.5, "price_info": {"price_per_token": 1.25}}},
+                {"id": "usdc-mint", "interface": "FungibleToken", "content": {"metadata": {"symbol": "USDC"}}, "token_info": {"balance": 1_000_000, "decimals": 6}},
+                {"id": "zero", "interface": "FungibleToken", "token_info": {"balance": 0}},
+                {"id": "nft", "interface": "V1_NFT", "token_info": {"balance": 1}},
+            ], "total": 1001}
         },
+    )
+    httpx_mock.add_response(
+        url=url,
+        json={"result": {"items": [
+            {"id": "mint-2", "interface": "FungibleAsset", "content": {"metadata": {}}, "token_info": {"balance": 2}},
+        ], "total": 1001}},
     )
 
     async with httpx.AsyncClient() as http_client:
@@ -94,10 +83,83 @@ async def test_wallet_client_returns_sol_and_nonzero_spl_assets(httpx_mock):
     assert snapshot.address == "wallet-1"
     assert [(asset.mint_address, asset.symbol, asset.quantity) for asset in snapshot.assets] == [
         (None, "SOL", 2.5),
-        ("mint-1", "mint-1", 4.5),
+        ("mint-1", "ONE", 4.5),
+        ("usdc-mint", "USDC", 1.0),
+        ("mint-2", "mint-2", 2.0),
     ]
+    assert snapshot.assets[1].price_usd == 1.25
     assert snapshot.total_usd is None
     assert snapshot.error is None
+    assert snapshot.partial is False
+    first_das_request = json.loads(httpx_mock.get_requests()[1].content)
+    assert first_das_request["params"] == {
+        "ownerAddress": "wallet-1",
+        "page": 1,
+        "limit": 1000,
+        "displayOptions": {"showFungible": True},
+    }
+
+
+@pytest.mark.asyncio
+async def test_wallet_client_keeps_first_page_when_later_das_page_fails(httpx_mock):
+    url = "https://mainnet.helius-rpc.com/?api-key=secret"
+    httpx_mock.add_response(url=url, json={"result": {"value": 1_000_000_000}})
+    httpx_mock.add_response(url=url, json={"result": {"items": [
+        {"id": "mint-1", "interface": "FungibleToken", "token_info": {"balance": 1}},
+    ], "total": 1001}})
+    httpx_mock.add_response(url=url, status_code=503)
+
+    async with httpx.AsyncClient() as http_client:
+        snapshot = await WalletClient(http_client, "secret").snapshot("wallet-1")
+
+    assert snapshot is not None
+    assert [asset.mint_address for asset in snapshot.assets] == [None, "mint-1"]
+    assert snapshot.partial is True
+
+
+@pytest.mark.asyncio
+async def test_wallet_client_marks_partial_when_das_page_cap_has_more_results(httpx_mock):
+    url = "https://mainnet.helius-rpc.com/?api-key=secret"
+    httpx_mock.add_response(url=url, json={"result": {"value": 0}})
+    httpx_mock.add_response(url=url, json={"result": {"items": [], "total": 1001}})
+
+    async with httpx.AsyncClient() as http_client:
+        snapshot = await WalletClient(http_client, "secret", max_das_pages=1).snapshot("wallet-1")
+
+    assert snapshot is not None
+    assert snapshot.partial is True
+
+
+@pytest.mark.asyncio
+async def test_wallet_client_returns_none_when_first_das_page_fails(httpx_mock):
+    url = "https://mainnet.helius-rpc.com/?api-key=secret"
+    httpx_mock.add_response(url=url, json={"result": {"value": 1_000_000_000}})
+    httpx_mock.add_response(url=url, status_code=503)
+
+    async with httpx.AsyncClient() as http_client:
+        snapshot = await WalletClient(http_client, "secret").snapshot("wallet-1")
+
+    assert snapshot is None
+
+
+@pytest.mark.asyncio
+async def test_wallet_service_persists_page_capped_snapshot_and_exposes_partial_api(httpx_mock, tmp_path):
+    url = "https://mainnet.helius-rpc.com/?api-key=secret"
+    httpx_mock.add_response(url=url, json={"result": {"value": 0}})
+    httpx_mock.add_response(url=url, json={"result": {"items": [], "total": 1001}})
+    repo = Repository(tmp_path / "signals.sqlite3")
+
+    async with httpx.AsyncClient() as http_client:
+        snapshot = await WalletService(
+            repo, WalletClient(http_client, "secret", max_das_pages=1), PriceStub({})
+        ).sample("wallet-1", datetime(2026, 7, 30, tzinfo=UTC))
+
+    assert snapshot.partial is True
+    assert repo.latest_wallet_snapshot() is not None
+    assert repo.latest_wallet_snapshot().partial is True
+    with TestClient(create_app(repo)) as test_client:
+        assert test_client.get("/api/wallet").json()["partial"] is True
+        assert test_client.get("/api/dashboard").json()["wallet"]["partial"] is True
 
 
 @pytest.mark.asyncio

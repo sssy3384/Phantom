@@ -139,7 +139,7 @@ def test_dashboard_has_exact_top_level_shape_and_three_highest_signal_cards(clie
     assert payload["signals"][0]["advice"]["max_position_pct"] == 5
     assert payload["wallet"] == {
         "assets": [], "total_usd": None, "sampled_at": None,
-        "stale": False, "error": "wallet snapshot unavailable",
+        "stale": False, "partial": False, "error": "wallet snapshot unavailable",
     }
     assert payload["runtime"] == {
         "state": "running", "running": True, "interval_seconds": 30,
@@ -193,7 +193,7 @@ def test_dashboard_degrades_safely_when_a_repository_read_raises(repository, mon
     assert response.json()["signals"] == []
     assert response.json()["wallet"] == {
         "assets": [], "total_usd": None, "sampled_at": None,
-        "stale": False, "error": "wallet snapshot unavailable",
+        "stale": False, "partial": False, "error": "wallet snapshot unavailable",
     }
     assert response.json()["runtime"]["database"] == {"status": "unavailable"}
     assert "key=SECRET" not in response.text
@@ -215,7 +215,7 @@ def test_all_read_routes_degrade_without_exposing_database_errors(repository, mo
     assert wallet.status_code == 200
     assert wallet.json() == {
         "assets": [], "total_usd": None, "sampled_at": None,
-        "stale": False, "error": "wallet snapshot unavailable",
+        "stale": False, "partial": False, "error": "wallet snapshot unavailable",
     }
     assert health.status_code == 200
     assert health.json() == {"sources": [], "database": {"status": "unavailable"}}
@@ -240,7 +240,7 @@ def test_wallet_returns_latest_snapshot_without_wallet_address(repository):
         "assets": [{"mint_address": "mint-1", "symbol": "<SOL>", "quantity": 2.5,
                     "price_usd": 100, "usd_value": 250}],
         "total_usd": 250, "sampled_at": "2026-07-30T12:00:00+00:00",
-        "stale": False, "error": None,
+        "stale": False, "partial": False, "error": None,
     }
     assert "private-wallet-address" not in response.text
 
@@ -263,9 +263,10 @@ def test_wallet_retains_last_successful_snapshot_when_latest_sample_failed(repos
         "assets": [{"mint_address": "mint-1", "symbol": "SOL", "quantity": 2.5,
                     "price_usd": 100, "usd_value": 250}],
         "total_usd": 250,
-        "sampled_at": successful_at.isoformat(),
-        "stale": True,
-        "error": "wallet data unavailable",
+            "sampled_at": successful_at.isoformat(),
+            "stale": True,
+            "partial": False,
+            "error": "wallet data unavailable",
     }
     assert wallet.json() == expected
     assert dashboard.json()["wallet"] == expected
@@ -279,7 +280,7 @@ def test_wallet_without_snapshot_returns_safe_unavailable_payload(repository):
     assert response.status_code == 200
     assert response.json() == {
         "assets": [], "total_usd": None, "sampled_at": None,
-        "stale": False, "error": "wallet snapshot unavailable",
+        "stale": False, "partial": False, "error": "wallet snapshot unavailable",
     }
 
 

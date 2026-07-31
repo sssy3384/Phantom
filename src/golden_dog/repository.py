@@ -160,6 +160,7 @@ class Repository:
             "total_usd": snapshot.total_usd,
             "sampled_at": snapshot.sampled_at.isoformat(),
             "error": snapshot.error,
+            "partial": snapshot.partial,
         }
         with self._connect() as connection:
             connection.execute(
@@ -200,6 +201,7 @@ class Repository:
             total_usd=payload["total_usd"],
             sampled_at=datetime.fromisoformat(payload["sampled_at"]),
             error=payload["error"],
+            partial=bool(payload.get("partial", False)),
         )
 
     def top_signals(self, limit: int) -> list[Decision]:

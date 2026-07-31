@@ -99,20 +99,30 @@ def _decision_payload(decision: Decision, *, detail: bool = False) -> dict[str, 
     return payload
 
 
-def _wallet_payload(snapshot: WalletSnapshot | None) -> dict[str, object]:
-    """Serialize persisted wallet data without exposing its watched address."""
-    if snapshot is None:
+def _wallet_payload(
+    successful_snapshot: WalletSnapshot | None,
+    latest_outcome: WalletSnapshot | None = None,
+) -> dict[str, object]:
+    """Serialize the last successful holdings and current scan outcome safely."""
+    if successful_snapshot is None:
+        latest_error = latest_outcome.error if latest_outcome is not None else None
         return {
             "assets": [],
             "total_usd": None,
             "sampled_at": None,
-            "error": "wallet snapshot unavailable",
+            "stale": False,
+            "error": (
+                _safe_error(latest_error, WALLET_UNAVAILABLE)
+                if latest_outcome is not None else "wallet snapshot unavailable"
+            ),
         }
+    latest_error = latest_outcome.error if latest_outcome is not None else None
     return {
-        "assets": [asdict(asset) for asset in snapshot.assets],
-        "total_usd": snapshot.total_usd,
-        "sampled_at": snapshot.sampled_at.isoformat(),
-        "error": _safe_error(snapshot.error, WALLET_UNAVAILABLE),
+        "assets": [asdict(asset) for asset in successful_snapshot.assets],
+        "total_usd": successful_snapshot.total_usd,
+        "sampled_at": successful_snapshot.sampled_at.isoformat(),
+        "stale": latest_error is not None,
+        "error": _safe_error(latest_error, WALLET_UNAVAILABLE),
     }
 
 
@@ -177,8 +187,9 @@ def create_app(
         decisions = _repository_read(repository.decisions)
         sources = _repository_read(repository.source_health)
         wallet = _repository_read(repository.latest_wallet_snapshot)
+        successful_wallet = _repository_read(repository.latest_successful_wallet_snapshot)
         signals = _repository_read(lambda: repository.top_signals(3))
-        if DATABASE_READ_FAILED in (decisions, sources, wallet, signals):
+        if DATABASE_READ_FAILED in (decisions, sources, wallet, successful_wallet, signals):
             return _degraded_dashboard(runtime, repository)
         assert isinstance(decisions, list)
         assert isinstance(sources, dict)
@@ -192,14 +203,17 @@ def create_app(
             "health": {"sources": [_health_item(name, value) for name, value in sorted(sources.items())]},
             "today": {"total": len(today_decisions), **counts},
             "signals": [_decision_payload(item) for item in signals],
-            "wallet": _wallet_payload(wallet),
+            "wallet": _wallet_payload(successful_wallet, wallet),
             "runtime": _runtime_payload(runtime, repository),
         }
 
     @app.get("/api/wallet")
     def wallet() -> dict[str, object]:
-        snapshot = _repository_read(repository.latest_wallet_snapshot)
-        return _wallet_payload(None if snapshot is DATABASE_READ_FAILED else snapshot)
+        latest_outcome = _repository_read(repository.latest_wallet_snapshot)
+        successful_snapshot = _repository_read(repository.latest_successful_wallet_snapshot)
+        if DATABASE_READ_FAILED in (latest_outcome, successful_snapshot):
+            return _wallet_payload(None)
+        return _wallet_payload(successful_snapshot, latest_outcome)
 
     @app.get("/api/signals/{pool_address}")
     def signal_detail(pool_address: str) -> dict[str, object]:

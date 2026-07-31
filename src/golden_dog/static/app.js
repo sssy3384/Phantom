@@ -4,7 +4,8 @@ const statusText = (status) => ({healthy: "正常", stale: "延迟", failed: "�
 const sourceStatusTitle = "数据源状态";
 
 function renderWallet(wallet) {
-  document.querySelector("#wallet").innerHTML = `<div class="panel"><b>${escapeHtml(wallet.total_usd == null ? "估值不可用" : `$${wallet.total_usd}`)}</b><span>采样时间：${escapeHtml(wallet.sampled_at)}</span><span>状态：${escapeHtml(wallet.error || "正常")}</span></div>`;
+  const walletStatus = wallet.stale ? "数据延迟：展示最近成功持仓" : (wallet.error || "正常");
+  document.querySelector("#wallet").innerHTML = `<div class="panel"><b>${escapeHtml(wallet.total_usd == null ? "估值不可用" : `$${wallet.total_usd}`)}</b><span>最近成功采样：${escapeHtml(wallet.sampled_at)}</span><span>状态：${escapeHtml(walletStatus)}</span></div>`;
   const assetRows = wallet.assets.map((asset) =>
     `<tr><td>${escapeHtml(asset.symbol)}</td><td>${escapeHtml(asset.quantity)}</td><td>${escapeHtml(asset.price_usd)}</td><td>${escapeHtml(asset.usd_value)}</td></tr>`
   ).join("");

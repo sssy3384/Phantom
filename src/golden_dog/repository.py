@@ -164,6 +164,22 @@ class Repository:
             row = connection.execute(
                 "SELECT payload_json FROM wallet_snapshots ORDER BY sampled_at DESC LIMIT 1"
             ).fetchone()
+        return self._wallet_snapshot_from_row(row)
+
+    def latest_successful_wallet_snapshot(self) -> WalletSnapshot | None:
+        """Return the most recent complete wallet sample, ignoring transient failures."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT payload_json FROM wallet_snapshots
+                WHERE error IS NULL
+                ORDER BY sampled_at DESC LIMIT 1
+                """
+            ).fetchone()
+        return self._wallet_snapshot_from_row(row)
+
+    @staticmethod
+    def _wallet_snapshot_from_row(row: sqlite3.Row | None) -> WalletSnapshot | None:
         if row is None:
             return None
         payload = json.loads(row["payload_json"])

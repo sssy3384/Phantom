@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 import importlib
 import inspect
+from pathlib import Path
 import sqlite3
 
 from fastapi.testclient import TestClient
@@ -406,3 +407,38 @@ def test_dashboard_styles_wrap_runtime_statuses_and_long_addresses(client):
     assert stylesheet.status_code == 200
     for required in ("#runtime", "flex-wrap: wrap", "overflow-wrap: anywhere", "@media (max-width: 480px)"):
         assert required in stylesheet.text
+
+
+def test_wallet_assets_show_public_mint_and_distinct_partial_status(client):
+    script = client.get("/static/app.js").text
+    stylesheet = client.get("/static/styles.css").text
+
+    for required in (
+        "asset.mint_address",
+        "<th>Mint</th>",
+        "数据不完整：已达到分页上限或上游响应中断",
+        "数据延迟：展示最近成功持仓",
+        "wallet.partial",
+        "wallet.stale",
+    ):
+        assert required in script
+    assert ".asset-mint" in stylesheet
+
+
+def test_readme_explains_all_token_wallet_monitoring_limits_and_safety():
+    readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
+
+    for required in (
+        "DAS",
+        "fungible",
+        "NFT",
+        "10 页",
+        "每页 1000 个资产（上限 10,000）",
+        "价格回退",
+        "当前 USD 估值",
+        "不是 PnL",
+        "公开地址",
+        "私钥",
+        "交易",
+    ):
+        assert required in readme

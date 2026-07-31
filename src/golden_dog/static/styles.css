@@ -15,7 +15,8 @@ section { margin-top: 2rem; } #summary, #signals, #health, #runtime { display: f
 .panel, .detail-card, .summary-item { overflow-wrap: anywhere; }
 .panel { display: grid; gap: .35rem; background: #1b2534; border-radius: .5rem; padding: .75rem; }
 .asset-table { overflow-x: auto; background: #1b2534; border-radius: .5rem; }
-table { width: 100%; border-collapse: collapse; min-width: 32rem; }
+table { width: 100%; border-collapse: collapse; min-width: 44rem; }
 th, td { padding: .7rem; border-bottom: 1px solid #314055; text-align: left; }
 th { color: #aeb9c8; font-weight: 600; }
+.asset-mint { min-width: 18rem; overflow-wrap: anywhere; }
 @media (max-width: 480px) { section { margin-top: 1.25rem; } .card, .health { flex-basis: 100%; } }
